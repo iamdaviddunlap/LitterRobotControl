@@ -1,3 +1,4 @@
 pylitterbot
 flask
 python-dotenv
+apscheduler
