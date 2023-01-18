@@ -1,4 +1,5 @@
 pylitterbot
-flask
+flask[async]==2.1.3
 python-dotenv
 apscheduler
+nest_asyncio
