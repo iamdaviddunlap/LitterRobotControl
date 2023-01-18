@@ -7,7 +7,6 @@ from time import time
 
 
 def safe_sync_run(func, *args, **kwargs):
-    # asyncio.set_event_loop(asyncio.SelectorEventLoop())
     result = asyncio.get_event_loop().run_until_complete(func(*args, **kwargs))
     return result
 
