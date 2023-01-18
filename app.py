@@ -1,14 +1,22 @@
 import asyncio
 from flask import Flask
 from litter_robot_async import get_info, trigger_cleaning
+from time import time
+import datetime
 
 
 loop = asyncio.get_event_loop()
 app = Flask(__name__)
+startup_time = time()
 
 
-@app.route("/info")
-def notify():
+@app.route("/liveness", methods=['GET'])
+def liveness():
+    return f'App has been live for {datetime.timedelta(seconds=(time() - startup_time))}'
+
+
+@app.route("/info", methods=['GET'])
+def report_info():
     info = loop.run_until_complete(get_info())
     return info
 
@@ -24,29 +32,3 @@ def cleaning_route():
 
 if __name__ == "__main__":
     app.run(debug=False, use_reloader=False)
-
-
-
-
-
-
-# from flask import Flask
-# from apscheduler.schedulers.background import BackgroundScheduler
-# from litter_robot_full_sync import get_info, trigger_cleaning
-#
-# app = Flask(__name__)
-#
-#
-# @app.route('/trigger_cleaning', methods=['POST'])
-# def cleaning_route():
-#     return trigger_cleaning()
-#     pass
-#
-#
-# @app.route('/info', methods=['GET'])
-# def info_route():
-#     return get_info()
-#
-#
-# if __name__ == '__main__':
-#     app.run(host='0.0.0.0', port=5000)
