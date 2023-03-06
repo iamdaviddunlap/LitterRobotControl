@@ -1,9 +1,11 @@
 import asyncio
+import sys
+import os
 
 from pylitterbot import Account
 from dotenv import load_dotenv
-import os
 from time import time
+from enum import Enum
 
 
 def safe_sync_run(func, *args, **kwargs):
@@ -57,18 +59,36 @@ def get_info():
         safe_sync_run(whisker_account.disconnect)
 
 
+class RunMode(Enum):
+    FULL_TEST = 1
+    PARTIAL_TEST = 2
+    CLEANING = 3
+
+
 if __name__ == '__main__':
-    start = time()
-    info = get_info()
-    print(info)
-    print(f'Got insight in {time() - start}s')
+    if len(sys.argv) == 0 or sys.argv[1] == 'FULL_TEST':
+        run_mode = RunMode.FULL_TEST
+    elif sys.argv[1] == 'PARTIAL_TEST':
+        run_mode = RunMode.PARTIAL_TEST
+    elif sys.argv[1] == 'CLEANING':
+        run_mode = RunMode.CLEANING
+    else:
+        raise ValueError(f"The run mode must be one of FULL_TEST, PARTIAL_TEST, or CLEANING. {sys.argv[1]}"
+                         f" is an invalid mode.")
 
-    start = time()
-    insight = get_insight()
-    print(insight)
-    print(f'Got insight in {time() - start}s')
+    if run_mode == RunMode.FULL_TEST or run_mode == RunMode.PARTIAL_TEST:
+        start = time()
+        info = get_info()
+        print(info)
+        print(f'Got insight in {time() - start}s')
 
-    # start = time()
-    # print(trigger_cleaning())
-    # print(f'Triggered cleaning in {time() - start}s')
+        start = time()
+        insight = get_insight()
+        print(insight)
+        print(f'Got insight in {time() - start}s')
+
+    if run_mode != RunMode.PARTIAL_TEST:
+        start = time()
+        print(trigger_cleaning())
+        print(f'Triggered cleaning in {time() - start}s')
 
