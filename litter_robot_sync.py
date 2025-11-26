@@ -3,6 +3,7 @@ import sys
 import os
 
 from pylitterbot import Account
+from pylitterbot import LitterRobot3
 from dotenv import load_dotenv
 from time import time
 from enum import Enum
@@ -25,12 +26,21 @@ def get_account():
 
     return account
 
-
 def get_insight(whisker_account=None):
     if whisker_account is None:
         whisker_account = get_account()
     try:
         result = safe_sync_run(whisker_account.robots[0].get_insight)
+        return result
+    finally:
+        safe_sync_run(whisker_account.disconnect)
+
+
+def get_activity_history(whisker_account=None):
+    if whisker_account is None:
+        whisker_account = get_account()
+    try:
+        result = safe_sync_run(whisker_account.robots[0].get_activity_history, limit=1000)
         return result
     finally:
         safe_sync_run(whisker_account.disconnect)
