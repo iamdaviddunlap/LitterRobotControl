@@ -5,7 +5,16 @@ from time import time
 import datetime
 
 
-loop = asyncio.get_event_loop()
+def run_async(coro):
+    """Run an async coroutine in a new event loop."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
 app = Flask(__name__)
 startup_time = time()
 
@@ -17,13 +26,13 @@ def liveness():
 
 @app.route("/info", methods=['GET'])
 def report_info():
-    info = loop.run_until_complete(get_info())
+    info = run_async(get_info())
     return info
 
 
 @app.route('/trigger_cleaning', methods=['POST'])
 def cleaning_route():
-    success = loop.run_until_complete(trigger_cleaning())
+    success = run_async(trigger_cleaning())
     if success:
         return '', 200
     else:

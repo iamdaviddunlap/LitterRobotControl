@@ -4,7 +4,7 @@ import os
 
 from pylitterbot import Account
 from pylitterbot import LitterRobot3
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from time import time
 from enum import Enum
 
@@ -16,9 +16,9 @@ def safe_sync_run(func, *args, **kwargs):
 
 def get_account():
     # Load the environment variables from the ".env" file.
-    load_dotenv()
-    username = os.getenv('WHISKER_USERNAME')
-    password = os.getenv('WHISKER_PASSWORD')
+    config = dotenv_values(".env")
+    username = config.get('WHISKER_USERNAME')
+    password = config.get('WHISKER_PASSWORD')
 
     # Connect to the account and load the robots associated with it.
     account = Account()

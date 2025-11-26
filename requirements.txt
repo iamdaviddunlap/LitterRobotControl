@@ -1,8 +1,10 @@
-pylitterbot
-flask[async]==2.1.3
-python-dotenv
+pylitterbot==2023.4.6
+flask>=3.0.0
+python-dotenv>=1.2.0
 apscheduler
 nest_asyncio
 matplotlib
 pandas
 schedule
+python-kasa
+aiohttp
