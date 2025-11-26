@@ -18,7 +18,7 @@ from litterbot import (
 )
 
 
-def setup_logging(log_file: str = "litter_robot_daemon.log") -> logging.Logger:
+def setup_logging(log_file: str = "data/logs/litter_robot_daemon.log") -> logging.Logger:
     """Configure logging with both file and console output."""
     logger = logging.getLogger("litter_robot_daemon")
     logger.setLevel(logging.INFO)

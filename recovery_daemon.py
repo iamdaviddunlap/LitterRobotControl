@@ -56,7 +56,7 @@ class Config:
     max_recovery_attempts: int = 3
 
     # Persistence
-    state_file: Path = field(default_factory=lambda: Path("recovery_state.json"))
+    state_file: Path = field(default_factory=lambda: Path("data/state/recovery_state.json"))
 
     # Notifications
     webhook_url: Optional[str] = None
@@ -90,7 +90,7 @@ class Config:
 # Logging Setup
 # ============================================================================
 
-def setup_logging(log_file: str = "recovery_daemon.log") -> logging.Logger:
+def setup_logging(log_file: str = "data/logs/recovery_daemon.log") -> logging.Logger:
     """Configure logging with both file and console output."""
     logger = logging.getLogger("recovery_daemon")
     logger.setLevel(logging.INFO)

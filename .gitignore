@@ -4,5 +4,11 @@ __pycache__/
 *.pyc
 venv/
 wsl-venv/
-*.log
-*_state.json
+
+# Legacy log files in root (to be deleted manually)
+litter_robot_daemon.log
+daemon_state.json
+
+# Data directory - ignore contents but keep structure
+data/logs/*.log
+data/state/*.json

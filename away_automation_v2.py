@@ -59,7 +59,7 @@ class Config:
     max_recovery_attempts: int = 3
 
     # Persistence
-    state_file: Path = field(default_factory=lambda: Path("away_automation_state.json"))
+    state_file: Path = field(default_factory=lambda: Path("data/state/away_automation_state.json"))
 
     # Notifications
     webhook_url: Optional[str] = None
@@ -93,7 +93,7 @@ class Config:
 # Logging Setup
 # ============================================================================
 
-def setup_logging(log_file: str = "away_automation_v2.log") -> logging.Logger:
+def setup_logging(log_file: str = "data/logs/away_automation_v2.log") -> logging.Logger:
     """Configure logging with both file and console output."""
     logger = logging.getLogger("away_automation_v2")
     logger.setLevel(logging.INFO)

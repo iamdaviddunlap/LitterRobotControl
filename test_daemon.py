@@ -17,7 +17,7 @@ from litterbot import Config
 async def test():
     """Run a single check and exit."""
     # Setup logging
-    logger = setup_logging("test_daemon.log")
+    logger = setup_logging("data/logs/test_daemon.log")
     logger.info("=" * 60)
     logger.info("Running single daemon check test")
     logger.info("=" * 60)

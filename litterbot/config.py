@@ -37,7 +37,7 @@ class Config:
     timezone: str = 'US/Mountain'
 
     # Persistence
-    state_file: Path = field(default_factory=lambda: Path("daemon_state.json"))
+    state_file: Path = field(default_factory=lambda: Path("data/state/daemon_state.json"))
 
     # Notifications
     webhook_url: Optional[str] = None
