@@ -5,4 +5,4 @@ __pycache__/
 venv/
 wsl-venv/
 *.log
-recovery_state.json
+*_state.json

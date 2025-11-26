@@ -8,3 +8,4 @@ pandas
 schedule
 python-kasa
 aiohttp
+pytz
