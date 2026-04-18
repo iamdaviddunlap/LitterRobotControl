@@ -10,6 +10,7 @@ from .robot_client import RobotClient
 from .state import DaemonState
 from .config import Config
 from .notifier import Notifier
+from .classifier import RecoveryAction
 
 
 logger = logging.getLogger("litter_robot_daemon")
@@ -69,3 +70,37 @@ class StatusMonitor:
         last_heartbeat = datetime.fromisoformat(self.state.last_heartbeat_at)
         elapsed = (datetime.now() - last_heartbeat).total_seconds() / 60
         return elapsed >= self.config.heartbeat_interval_minutes
+
+    def track_oscillation(self, status: LitterBoxStatus, action: RecoveryAction) -> None:
+        """Track oscillation patterns during errors."""
+        is_error = (action == RecoveryAction.POWER_CYCLE)
+
+        if not self.state.current_error_occurrence:
+            return
+
+        occurrence = self.state.current_error_occurrence
+
+        # Track consecutive error vs transient checks
+        if is_error:
+            occurrence.consecutive_error_checks += 1
+        else:
+            # Track unique transient states seen
+            if status.name not in occurrence.transient_states_seen:
+                occurrence.transient_states_seen.append(status.name)
+
+        # Detect oscillation: error → transient → error
+        if self.state.last_check_was_error and not is_error:
+            # Just transitioned from error to transient
+            pass
+        elif not self.state.last_check_was_error and is_error:
+            # Just transitioned from transient back to error - that's one oscillation
+            self.state.oscillation_cycle_count += 1
+            occurrence.oscillation_count += 1
+
+            # Mark as oscillating after 3+ cycles
+            if occurrence.oscillation_count >= 3:
+                if not occurrence.oscillation_detected:
+                    occurrence.oscillation_detected = True
+                    logger.info(f"Oscillation pattern detected: {occurrence.oscillation_count} cycles")
+
+        self.state.last_check_was_error = is_error

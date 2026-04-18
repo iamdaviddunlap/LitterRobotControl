@@ -29,7 +29,7 @@ class PowerCycleRecovery(RecoveryStrategy):
         self.plug = plug
         self.wait_seconds = wait_seconds
 
-    async def execute(self, robot: Robot, attempt: int) -> bool:
+    async def execute(self, robot: Robot, attempt: int, stabilization_minutes: float = 3.0) -> bool:
         logger.info(f"=== Power Cycle Recovery (Attempt {attempt}) ===")
 
         # Step 1: Power cycle
@@ -53,8 +53,10 @@ class PowerCycleRecovery(RecoveryStrategy):
                 logger.info(f"Recovery successful! Robot returned to normal state: {status.name}")
                 return True
             elif action == RecoveryAction.WAIT:
-                logger.info(f"Recovery successful! Robot is operational in transient state: {status.name}")
-                return True
+                # CRITICAL FIX: Don't immediately declare success for transient states
+                # Monitor for stabilization period to ensure error doesn't return
+                logger.info(f"Robot in transient state: {status.name} - monitoring for {stabilization_minutes:.1f} min stabilization...")
+                return await self._monitor_stabilization(robot, stabilization_minutes)
 
         # Step 4: If still in error, try triggering a clean cycle
         if status and classify_status(status) == RecoveryAction.POWER_CYCLE:
@@ -65,11 +67,60 @@ class PowerCycleRecovery(RecoveryStrategy):
                 await robot.refresh()
                 status = robot.status
 
-                if status and classify_status(status) in (RecoveryAction.NONE, RecoveryAction.WAIT):
+                action = classify_status(status) if status else None
+                if action == RecoveryAction.NONE:
                     logger.info(f"Recovery successful after clean cycle! Status: {status.name}")
                     return True
+                elif action == RecoveryAction.WAIT:
+                    logger.info(f"Robot in transient state after clean cycle: {status.name} - monitoring stabilization...")
+                    return await self._monitor_stabilization(robot, stabilization_minutes)
             except Exception as e:
                 logger.error(f"Failed to trigger clean cycle: {e}")
 
         logger.warning(f"Recovery incomplete. Robot status: {status.name if status else 'Unknown'}")
         return False
+
+    async def _monitor_stabilization(self, robot: Robot, stabilization_minutes: float) -> bool:
+        """
+        Monitor robot for stabilization period to ensure error doesn't immediately return.
+
+        Returns True if robot either:
+        - Reaches stable state (READY, CLEAN_CYCLE_COMPLETE)
+        - Remains in transient states for full stabilization period without returning to error
+
+        Returns False if robot returns to error state during stabilization.
+        """
+        from datetime import datetime, timedelta
+
+        stabilization_end = datetime.now() + timedelta(minutes=stabilization_minutes)
+        check_interval_seconds = 10  # Check every 10 seconds
+
+        while datetime.now() < stabilization_end:
+            await asyncio.sleep(check_interval_seconds)
+            await robot.refresh()
+            status = robot.status
+
+            if not status:
+                logger.warning("Lost robot status during stabilization monitoring")
+                return False
+
+            action = classify_status(status)
+
+            # If reached stable state, declare success immediately
+            if action == RecoveryAction.NONE:
+                elapsed = (datetime.now() - (stabilization_end - timedelta(minutes=stabilization_minutes))).total_seconds()
+                logger.info(f"Recovery confirmed stable after {elapsed:.0f}s - reached {status.name}")
+                return True
+
+            # If returned to error state, recovery failed
+            if action == RecoveryAction.POWER_CYCLE:
+                elapsed = (datetime.now() - (stabilization_end - timedelta(minutes=stabilization_minutes))).total_seconds()
+                logger.warning(f"Recovery failed - error returned after {elapsed:.0f}s ({status.name})")
+                return False
+
+            # Still in transient state (WAIT) - continue monitoring
+            # logger.debug(f"Stabilization check: {status.name} (OK)")
+
+        # Made it through full stabilization period without returning to error
+        logger.info(f"Recovery confirmed stable after {stabilization_minutes:.1f} min monitoring")
+        return True

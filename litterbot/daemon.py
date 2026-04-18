@@ -8,7 +8,7 @@ from typing import Optional
 from pylitterbot.enums import LitterBoxStatus
 
 from .config import Config
-from .state import DaemonState, StateStore
+from .state import DaemonState, StateStore, ErrorOccurrence
 from .robot_client import RobotClient
 from .smart_plug import SmartPlugController
 from .notifier import Notifier
@@ -16,6 +16,8 @@ from .classifier import classify_status, RecoveryAction
 from .recovery import PowerCycleRecovery
 from .scheduler import ScheduledCleaner
 from .monitor import StatusMonitor
+from .analytics import ErrorAnalytics
+from .timeout_calculator import TimeoutCalculator
 
 
 logger = logging.getLogger("litter_robot_daemon")
@@ -47,6 +49,8 @@ class LitterRobotDaemon:
         self.scheduler = scheduler
         self.state = state_store.load()
         self.recovery_strategy = PowerCycleRecovery(plug, config.power_cycle_wait_seconds)
+        self.timeout_calculator = TimeoutCalculator(config)
+        self.analytics = ErrorAnalytics()
         self._running = False
 
     def _reset_error_tracking(self) -> None:
@@ -91,7 +95,31 @@ class LitterRobotDaemon:
     async def _handle_normal(self, status: LitterBoxStatus) -> None:
         """Robot is operating normally."""
         if self.state.error_detected_at:
-            logger.info(f"Robot recovered to normal state: {status.name}")
+            # Record self-resolution in history
+            if self.state.current_error_occurrence:
+                occurrence = self.state.current_error_occurrence
+                occurrence.ended_at = datetime.now().isoformat()
+                occurrence.duration_minutes = (datetime.fromisoformat(occurrence.ended_at) -
+                                              datetime.fromisoformat(occurrence.started_at)).total_seconds() / 60
+                occurrence.recovery_method = "self_resolved"
+                occurrence.recovery_successful = True
+
+                # Only record errors that persisted longer than minimum threshold
+                if occurrence.duration_minutes >= self.config.min_error_duration_minutes:
+                    # Add to history (keep last analytics_history_size occurrences)
+                    self.state.error_history.append(occurrence)
+                    if len(self.state.error_history) > self.config.analytics_history_size:
+                        self.state.error_history.pop(0)
+
+                    logger.info(f"Robot self-resolved from {occurrence.error_type} after {occurrence.duration_minutes:.1f} min")
+                else:
+                    # Brief error - don't record in history
+                    logger.info(f"Brief error cleared: {occurrence.error_type} after {occurrence.duration_minutes:.1f} min (below {self.config.min_error_duration_minutes} min threshold)")
+
+                self.state.current_error_occurrence = None
+            else:
+                logger.info(f"Robot recovered to normal state: {status.name}")
+
             self._reset_error_tracking()
 
     async def _handle_transient(self, status: LitterBoxStatus) -> None:
@@ -122,19 +150,61 @@ class LitterRobotDaemon:
         if not self.state.error_detected_at:
             self.state.error_start_time = now
             self.state.error_action_type = "POWER_CYCLE"
-            logger.warning(f"Error detected: {status.name} - starting timer")
+
+            # Check if this is a post-recovery error (don't reset attempt counter)
+            is_post_recovery = self.state.is_post_recovery_error(
+                window_minutes=self.config.post_recovery_error_window_minutes
+            )
+
+            if is_post_recovery:
+                seconds_since_recovery = (now - datetime.fromisoformat(self.state.last_recovery_at)).total_seconds()
+                logger.warning(
+                    f"Error detected: {status.name} - {seconds_since_recovery:.0f}s after recovery "
+                    f"(attempt #{self.state.recovery_attempts + 1} will retry)"
+                )
+            else:
+                # Fresh error - reset attempt counter
+                self.state.recovery_attempts = 0
+                logger.warning(f"Error detected: {status.name} - starting timer")
+
+            # Create error occurrence for tracking
+            self.state.current_error_occurrence = ErrorOccurrence(
+                error_type=status.name,
+                started_at=now.isoformat(),
+            )
+
+            # Initialize oscillation tracking state
+            self.state.last_check_was_error = True
+            self.state.oscillation_cycle_count = 0
+
             return
+
+        # Track oscillation pattern
+        action = classify_status(status)
+        self.monitor.track_oscillation(status, action)
 
         # Check if error has persisted long enough
         duration = self.state.error_duration_minutes()
 
-        # Log only at milestone durations to avoid spam
+        # Calculate adaptive timeout
+        adaptive_timeout, timeout_reason = self.timeout_calculator.calculate_timeout(
+            self.state, status.name
+        )
+
+        # Update occurrence with timeout info
+        if self.state.current_error_occurrence:
+            self.state.current_error_occurrence.timeout_used_minutes = adaptive_timeout
+            self.state.current_error_occurrence.adaptive_timeout_reason = timeout_reason
+
+        # Log milestone with adaptive timeout
         current_minute = int(duration)
         if current_minute in self.config.error_log_milestones and current_minute != self.state.last_error_log_minute:
-            logger.warning(f"Error persisting: {status.name} ({duration:.1f}/{self.config.error_timeout_minutes} min)")
+            logger.warning(
+                f"Error persisting: {status.name} ({duration:.1f}/{adaptive_timeout:.0f} min) - {timeout_reason}"
+            )
             self.state.last_error_log_minute = current_minute
 
-        if duration < self.config.error_timeout_minutes:
+        if duration < adaptive_timeout:
             return  # Not yet time to recover
 
         # Check max attempts
@@ -157,9 +227,37 @@ class LitterRobotDaemon:
             logger.error("Could not get robot for recovery")
             return
 
-        success = await self.recovery_strategy.execute(robot, self.state.recovery_attempts)
+        # Execute recovery with stabilization monitoring
+        success = await self.recovery_strategy.execute(
+            robot,
+            self.state.recovery_attempts,
+            stabilization_minutes=self.config.recovery_stabilization_minutes
+        )
+
+        # Track recovery time (regardless of success/failure)
+        self.state.last_recovery_at = datetime.now().isoformat()
 
         if success:
+            # Record successful recovery in history
+            if self.state.current_error_occurrence:
+                occurrence = self.state.current_error_occurrence
+                occurrence.ended_at = datetime.now().isoformat()
+                occurrence.duration_minutes = (datetime.fromisoformat(occurrence.ended_at) -
+                                              datetime.fromisoformat(occurrence.started_at)).total_seconds() / 60
+                occurrence.recovery_method = "power_cycle"
+                occurrence.recovery_attempts = self.state.recovery_attempts
+                occurrence.recovery_successful = True
+
+                # Only record errors that persisted longer than minimum threshold
+                # (Power-cycled errors are typically >5 min, so this should always pass)
+                if occurrence.duration_minutes >= self.config.min_error_duration_minutes:
+                    # Add to history (keep last analytics_history_size occurrences)
+                    self.state.error_history.append(occurrence)
+                    if len(self.state.error_history) > self.config.analytics_history_size:
+                        self.state.error_history.pop(0)
+
+                self.state.current_error_occurrence = None
+
             self.state.error_detected_at = None
             self.state.recovery_attempts = 0
             self.state.total_recoveries += 1

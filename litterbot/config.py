@@ -22,7 +22,7 @@ class Config:
     # Timing - Updated defaults for faster polling
     check_interval_seconds: int = 10  # Changed from 60 to 10
     heartbeat_interval_minutes: int = 5  # NEW: Periodic alive log
-    error_timeout_minutes: int = 30
+    error_timeout_minutes: float = 30  # Changed to float to allow fractional minutes
     power_cycle_wait_seconds: int = 7
     post_recovery_wait_seconds: int = 120
     max_recovery_attempts: int = 3
@@ -35,6 +35,21 @@ class Config:
     # Scheduled cleaning configuration
     cleaning_times: List[str] = field(default_factory=lambda: ['02:29', '11:29', '16:29', '23:29'])
     timezone: str = 'US/Mountain'
+
+    # Adaptive timeout configuration
+    min_timeout_minutes: int = 5
+    max_timeout_minutes: int = 60
+
+    # Post-recovery configuration
+    recovery_stabilization_minutes: float = 3.0  # How long to monitor after power cycle
+    post_recovery_error_window_minutes: float = 3.0  # Time window to consider "post-recovery error"
+    post_recovery_retry_timeout_minutes: float = 5.0  # Fast retry timeout for post-recovery errors
+
+    # Error recording threshold
+    min_error_duration_minutes: float = 3.0  # Only record errors lasting > this duration
+
+    # Analytics
+    analytics_history_size: int = 100
 
     # Persistence
     state_file: Path = field(default_factory=lambda: Path("data/state/daemon_state.json"))
@@ -75,7 +90,7 @@ class Config:
             smart_plug_ip=config["SMART_PLUG_IP"],
             check_interval_seconds=int(config.get("CHECK_INTERVAL_SECONDS", 10)),
             heartbeat_interval_minutes=int(config.get("HEARTBEAT_INTERVAL_MINUTES", 5)),
-            error_timeout_minutes=int(config.get("ERROR_TIMEOUT_MINUTES", 30)),
+            error_timeout_minutes=float(config.get("ERROR_TIMEOUT_MINUTES", 30)),
             power_cycle_wait_seconds=int(config.get("POWER_CYCLE_WAIT_SECONDS", 7)),
             max_recovery_attempts=int(config.get("MAX_RECOVERY_ATTEMPTS", 3)),
             error_log_milestones=error_log_milestones,
@@ -83,5 +98,12 @@ class Config:
             enable_scheduled_cleaning=enable_scheduled_cleaning,
             cleaning_times=cleaning_times,
             timezone=config.get("TIMEZONE", "US/Mountain"),
+            min_timeout_minutes=int(config.get("MIN_TIMEOUT_MINUTES", 5)),
+            max_timeout_minutes=int(config.get("MAX_TIMEOUT_MINUTES", 60)),
+            recovery_stabilization_minutes=float(config.get("RECOVERY_STABILIZATION_MINUTES", 3.0)),
+            post_recovery_error_window_minutes=float(config.get("POST_RECOVERY_ERROR_WINDOW_MINUTES", 3.0)),
+            post_recovery_retry_timeout_minutes=float(config.get("POST_RECOVERY_RETRY_TIMEOUT_MINUTES", 5.0)),
+            min_error_duration_minutes=float(config.get("MIN_ERROR_DURATION_MINUTES", 3.0)),
+            analytics_history_size=int(config.get("ANALYTICS_HISTORY_SIZE", 100)),
             webhook_url=config.get("WEBHOOK_URL"),
         )

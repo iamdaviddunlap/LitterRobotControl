@@ -6,6 +6,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 LitterRobotControl is a Flask-based web service that interfaces with Litter-Robot devices via the pylitterbot library and provides HTTP endpoints for monitoring and controlling litter box cleaning cycles. The project also includes TP-Link Kasa smart plug control and data analysis tools for optimizing cleaning schedules.
 
+### Project Structure
+
+```
+data/
+├── logs/           # Daemon and application logs
+│   └── litter_robot_daemon.log
+└── state/          # Persistent daemon state
+    └── daemon_state.json
+
+litterbot/          # Modular daemon package
+├── config.py       # Configuration management
+├── state.py        # State persistence
+├── robot_client.py # Whisker API connection
+├── smart_plug.py   # Kasa smart plug control
+├── notifier.py     # Webhook notifications
+├── classifier.py   # Error classification
+├── recovery.py     # Recovery strategies
+├── scheduler.py    # Scheduled cleaning
+├── monitor.py      # Status monitoring
+└── daemon.py       # Main orchestrator
+```
+
 ## Environment Setup
 
 ### Python Virtual Environment
@@ -46,9 +68,23 @@ SMART_PLUG_IP=192.168.0.80
 # Optional daemon configuration (defaults shown)
 CHECK_INTERVAL_SECONDS=10           # Polling frequency (default: 10s)
 HEARTBEAT_INTERVAL_MINUTES=5        # Heartbeat log frequency (default: 5 min)
-ERROR_TIMEOUT_MINUTES=30            # Wait before recovery (default: 30 min)
+ERROR_TIMEOUT_MINUTES=10            # Base error timeout - TUNED for semi-faulty motor (default: 30, recommended: 10)
 POWER_CYCLE_WAIT_SECONDS=7          # Power cycle duration (default: 7s)
 MAX_RECOVERY_ATTEMPTS=3             # Max recovery tries (default: 3)
+ERROR_LOG_MILESTONES=1,5,10,15,20,25,29  # Error duration minutes to log (default shown)
+
+# Adaptive timeout configuration (optional)
+MIN_TIMEOUT_MINUTES=5               # Minimum timeout for fast intervention (default: 5)
+MAX_TIMEOUT_MINUTES=20              # Maximum timeout - TUNED for real-world patterns (default: 60, recommended: 20)
+
+# Post-recovery configuration (optional) - NEW in v2.0
+RECOVERY_STABILIZATION_MINUTES=3.0      # Monitor robot after power cycle to prevent false success (default: 3.0)
+POST_RECOVERY_ERROR_WINDOW_MINUTES=3.0  # Time window to detect post-recovery errors (default: 3.0)
+POST_RECOVERY_RETRY_TIMEOUT_MINUTES=5   # Fast retry timeout for errors after recovery (default: 5)
+MIN_ERROR_DURATION_MINUTES=3.0          # Only record errors > this duration in history (default: 3.0)
+
+# Analytics (optional)
+ANALYTICS_HISTORY_SIZE=100          # Number of error occurrences to retain (default: 100)
 
 # Feature flags (optional)
 ENABLE_RECOVERY=true                # Enable error recovery (default: true)
@@ -222,6 +258,10 @@ python test_daemon.py  # Single check, then exit
 CHECK_INTERVAL_SECONDS=10           # Polling frequency (default: 10s)
 HEARTBEAT_INTERVAL_MINUTES=5        # Heartbeat log frequency (default: 5 min)
 ERROR_TIMEOUT_MINUTES=30            # Wait before recovery (default: 30 min)
+ERROR_LOG_MILESTONES=1,5,10,15,20,25,29  # Error duration minutes to log
+MIN_TIMEOUT_MINUTES=5               # Adaptive timeout minimum (default: 5 min)
+MAX_TIMEOUT_MINUTES=60              # Adaptive timeout maximum (default: 60 min)
+ANALYTICS_HISTORY_SIZE=100          # Error history size (default: 100)
 ENABLE_RECOVERY=true                # Enable error recovery
 ENABLE_SCHEDULED_CLEANING=true      # Enable scheduled cleaning
 CLEANING_TIMES=02:29,11:29,16:29,23:29

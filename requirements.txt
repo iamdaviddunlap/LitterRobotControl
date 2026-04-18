@@ -1,4 +1,4 @@
-pylitterbot==2023.4.6
+pylitterbot==2025.3.2
 flask>=3.0.0
 python-dotenv>=1.2.0
 apscheduler
