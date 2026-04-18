@@ -16,7 +16,8 @@ def safe_sync_run(func, *args, **kwargs):
 
 def get_account():
     # Load the environment variables from the ".env" file.
-    config = dotenv_values(".env")
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    config = dotenv_values(env_path)
     username = config.get('WHISKER_USERNAME')
     password = config.get('WHISKER_PASSWORD')
 

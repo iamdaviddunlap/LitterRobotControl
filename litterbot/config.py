@@ -1,5 +1,6 @@
 """Configuration management for Litter Robot Daemon."""
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List
@@ -58,8 +59,10 @@ class Config:
     webhook_url: Optional[str] = None
 
     @classmethod
-    def from_env(cls, env_path: str = ".env") -> "Config":
+    def from_env(cls, env_path: Optional[str] = None) -> "Config":
         """Load configuration from .env file."""
+        if env_path is None:
+            env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
         config = dotenv_values(env_path)
 
         required = ["WHISKER_USERNAME", "WHISKER_PASSWORD",
